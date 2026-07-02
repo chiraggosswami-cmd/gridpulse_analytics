@@ -3,7 +3,6 @@ import pickle
 import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
 # Import the custom modules we built earlier!
@@ -31,10 +30,21 @@ def train_production_model(data_path: str, output_dir: str = "models"):
     X = df_featured[feature_cols]
     y = df_featured['IsStealer']
     
-    print("✂️ Step 3: Splitting datasets into evaluation segments...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    print("✂️ Step 3: Applying Out-of-Sample Time-Series Splitting...")
+    # Establish a clean temporal boundary cut point (e.g., Jan 1st, 2016)
+    split_date = pd.Timestamp('2016-01-01')
+    
+    # Isolate training indices into past history, and test indices into future logs
+    train_mask = df_featured['Date'] < split_date
+    test_mask = df_featured['Date'] >= split_date
+    
+    X_train = X[train_mask]
+    y_train = y[train_mask]
+    X_test = X[test_mask]
+    y_test = y[test_mask]
+    
+    print(f"📍 Train Range: {df_featured[train_mask]['Date'].min().strftime('%Y-%m-%d')} to {df_featured[train_mask]['Date'].max().strftime('%Y-%m-%d')}")
+    print(f"📍 Test Range:  {df_featured[test_mask]['Date'].min().strftime('%Y-%m-%d')} to {df_featured[test_mask]['Date'].max().strftime('%Y-%m-%d')}")
     
     print("⚖️ Step 4: Computing target weight balances...")
     # Dynamic computation of scale_pos_weight to balance minority theft patterns
