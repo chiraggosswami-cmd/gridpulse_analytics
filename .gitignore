@@ -1,0 +1,24 @@
+# Ignore raw datasets (Never push large CSV files to GitHub)
+*.csv
+*.xlsx
+/data/
+
+# Ignore Python cached files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Ignore local machine learning models & lookup binaries 
+models/*.pkl
+*.pkl
+
+# Ignore local environment configurations & IDEs
+.env
+.venv
+env/
+venv/
+.vscode/
+.idea/
+.streamlit/
