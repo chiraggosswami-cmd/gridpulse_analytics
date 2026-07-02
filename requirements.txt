@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+streamlit
+xgboost
+scikit-learn
+pandas
+numpy
+scipy
+requests
+kagglehub
