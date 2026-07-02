@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
-import requests  # <-- NEW NETWORK CLIENT IMPORT
+import requests
 import os
 import time
 
-# --- 1. CONFIGURATION & THEME ---
+# --- 1. CONFIGURATION & THEME OVERRIDES ---
 st.set_page_config(page_title="GridPulse Analytics Engine", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -27,15 +27,15 @@ st.markdown("""
     <div style="padding: 10px 0px 25px 0px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 35px;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
             <span style="background: rgba(0, 240, 255, 0.1); color: #00F0FF; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; letter-spacing: 1px;">MICROSERVICE API CONNECTED</span>
+            <span style="background: rgba(168, 85, 247, 0.1); color: #A855F7; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; letter-spacing: 1px;">DATA DRIFT MONITOR ACTIVE</span>
         </div>
         <h1 style="color: white; margin: 0; font-size: 2.4rem; font-weight: 800; letter-spacing: -1px;">⚡ GridPulse Analytics</h1>
     </div>
 """, unsafe_allow_html=True)
 
-# API Endpoint definition
 API_URL = "http://127.0.0.1:8000/predict"
 
-# --- 2. CACHED USER LOOKUP LOADER (No models loaded here!) ---
+# --- 2. CACHED USER LOOKUP LOADER ---
 @st.cache_resource
 def load_user_lookup():
     paths = ["../models/user_lookup.pkl", "models/user_lookup.pkl", "user_lookup.pkl"]
@@ -46,7 +46,7 @@ def load_user_lookup():
 
 user_lookup = load_user_lookup()
 if user_lookup is None:
-    st.error("⚠️ user_lookup.pkl missing. Run training script first.")
+    st.error("⚠️ user_lookup.pkl reference matrix missing.")
     st.stop()
 
 # --- 3. SIDEBAR INTERACTION CONTROL ---
@@ -83,7 +83,7 @@ with metrics_col3:
     divergence_color = "#FF4B4B" if abs(diff_from_mean) > (user_historical_mean * 1.5) else "#00F0FF"
     st.markdown(f'<div class="custom-card"><div class="card-label">🔄 Footprint Divergence</div><div class="card-value" style="color: {divergence_color} !important;">{diff_from_mean:+.2f}<span class="card-unit">kWh</span></div></div>', unsafe_allow_html=True)
 
-# --- 6. DISPLAY GRAPHICS & LIVE HTTP REQUESTS ---
+# --- 6. DISPLAY GRAPHICS & REAL-TIME INFERENCE RUN ---
 left_panel, right_panel = st.columns([2, 1])
 with left_panel:
     st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600;'>📈 14-Day Trailing Consumption Stream</h3>", unsafe_allow_html=True)
@@ -91,22 +91,17 @@ with left_panel:
     st.line_chart(chart_df, color=chart_color, height=300)
 
 with right_panel:
-    st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600;'>🤖 API Network Gateway</h3>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#64748B; font-size:0.85rem; margin-bottom:20px;'>Dispatches operational feature vectors to FastAPI engine over HTTP network protocols:</p>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600;'>🤖 Live Network Inferences</h3>", unsafe_allow_html=True)
     
     if st.button("🚀 Execute Hybrid Defense Scan", use_container_width=True):
         payload = {
-            "consumption": float(input_consumption),
-            "day_of_week": int(day_of_week_dummy),
-            "is_weekend": int(is_weekend_numeric),
-            "user_mean": float(user_historical_mean),
-            "diff_from_mean": float(diff_from_mean),
-            "rolling_mean_7d": float(rolling_mean_7d),
-            "diff_from_rolling": float(diff_from_rolling)
+            "consumption": float(input_consumption), "day_of_week": int(day_of_week_dummy), "is_weekend": int(is_weekend_numeric),
+            "user_mean": float(user_historical_mean), "diff_from_mean": float(diff_from_mean),
+            "rolling_mean_7d": float(rolling_mean_7d), "diff_from_rolling": float(diff_from_rolling)
         }
         
         try:
-            with st.spinner("Awaiting network response..."):
+            with st.spinner("Pinging API..."):
                 response = requests.post(API_URL, json=payload, timeout=5)
                 
             if response.status_code == 200:
@@ -114,28 +109,27 @@ with right_panel:
                 is_anomaly = data["is_anomaly"]
                 xgb_prob = data["xgb_theft_probability"] * 100
                 if_pred = data["isolation_forest_prediction"]
+                drift = data["drift_metrics"]
                 
+                # Render ML Classification Panel
                 if is_anomaly == 1:
-                    st.markdown(f"""
-                        <div class="status-panel" style="border-left: 4px solid #FF4B4B;">
-                            <h4 style="color:#FF4B4B; margin:0 0 6px 0; font-size:1rem; font-weight:700;">🚨 SECURITY COMPROMISED</h4>
-                            <p style="color:#94A3B8; margin:0; font-size:0.85rem; line-height:1.5;">
-                                <b>XGBoost Risk Score:</b> {xgb_prob:.1f}%<br>
-                                <b>Isolation Forest Status:</b> {"⚠️ Outlier Detected" if if_pred==-1 else "Normal"}<br><br>
-                                <span style="color:#FF4B4B;">REST API Response Status:</span> 200 OK
-                            </p>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f'<div class="status-panel" style="border-left: 4px solid #FF4B4B;"><h4 style="color:#FF4B4B; margin:0 0 6px 0; font-size:1rem; font-weight:700;">🚨 SECURITY COMPROMISED</h4><p style="color:#94A3B8; margin:0; font-size:0.85rem;">XGBoost Risk: {xgb_prob:.1f}%<br>Isolation Forest: Outlier Flagged</p></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown("""
-                        <div class="status-panel" style="border-left: 4px solid #00F0FF;">
-                            <h4 style="color:#00F0FF; margin:0 0 6px 0; font-size:1rem; font-weight:700;">✅ SECURITY SECURE</h4>
-                            <p style="color:#94A3B8; margin:0; font-size:0.85rem; line-height:1.5;">
-                                REST API verified. All telemetry variables check out within normal operating standard deviations.
-                            </p>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown('<div class="status-panel" style="border-left: 4px solid #00F0FF;"><h4 style="color:#00F0FF; margin:0 0 6px 0; font-size:1rem; font-weight:700;">✅ SECURITY SECURE</h4><p style="color:#94A3B8; margin:0; font-size:0.85rem;">Grid signatures mapping normally.</p></div>', unsafe_allow_html=True)
+                
+                # Render Live Statistical Data Drift Monitor Dashboard Block
+                st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600; margin-top:25px;'>📊 Data Drift Telemetry</h3>", unsafe_allow_html=True)
+                drift_border = "#FF4B4B" if drift["drift_detected"] else "#A855F7"
+                st.markdown(f"""
+                    <div class="status-panel" style="border-left: 4px solid {drift_border}; margin-top:10px;">
+                        <h4 style="color:{drift_border}; margin:0 0 4px 0; font-size:0.9rem; font-weight:700;">{drift["status"]}</h4>
+                        <p style="color:#94A3B8; margin:0; font-size:0.85rem;">
+                            <b>K-S Test p-value:</b> {drift["p_value"]:.4f}<br>
+                            <span style="font-size:0.75rem; color:#64748B;">(If p-value drops below 0.05, input distribution varies significantly from training baseline).</span>
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
             else:
-                st.error(f"❌ API Server returned error code: {response.status_code}")
+                st.error(f"❌ API Error: {response.status_code}")
         except requests.exceptions.ConnectionError:
-            st.error("❌ API Server offline. Please launch the FastAPI engine behind this dashboard via 'uvicorn src.api:app --reload'")
+            st.error("❌ API Server offline.")
