@@ -2,15 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import requests  # <-- NEW NETWORK CLIENT IMPORT
 import os
 import time
 
-# --- 1. CONFIGURATION & THEME OVERRIDES ---
-st.set_page_config(
-    page_title="GridPulse Analytics Engine",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- 1. CONFIGURATION & THEME ---
+st.set_page_config(page_title="GridPulse Analytics Engine", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -29,36 +26,27 @@ st.markdown("""
 st.markdown("""
     <div style="padding: 10px 0px 25px 0px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 35px;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <span style="background: rgba(0, 240, 255, 0.1); color: #00F0FF; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; letter-spacing: 1px;">SYSTEM RUNNING</span>
-            <span style="color: #64748B; font-size: 0.8rem;">•</span>
-            <span style="color: #64748B; font-size: 0.8rem; font-weight: 500;">HYBRID ENSEMBLE SYSTEM ACTIVE</span>
+            <span style="background: rgba(0, 240, 255, 0.1); color: #00F0FF; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; letter-spacing: 1px;">MICROSERVICE API CONNECTED</span>
         </div>
         <h1 style="color: white; margin: 0; font-size: 2.4rem; font-weight: 800; letter-spacing: -1px;">⚡ GridPulse Analytics</h1>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 2. MULTI-MODEL ASSET LOADER ---
+# API Endpoint definition
+API_URL = "http://127.0.0.1:8000/predict"
+
+# --- 2. CACHED USER LOOKUP LOADER (No models loaded here!) ---
 @st.cache_resource
-def load_hybrid_artifacts():
-    paths = ["../models/", "models/", ""]
-    xgb, iso, lookup = None, None, None
-    
+def load_user_lookup():
+    paths = ["../models/user_lookup.pkl", "models/user_lookup.pkl", "user_lookup.pkl"]
     for p in paths:
-        if os.path.exists(os.path.join(p, "xgb_anomaly_model.pkl")):
-            with open(os.path.join(p, "xgb_anomaly_model.pkl"), 'rb') as f: xgb = pickle.load(f)
-        if os.path.exists(os.path.join(p, "iso_forest_model.pkl")):
-            with open(os.path.join(p, "iso_forest_model.pkl"), 'rb') as f: iso = pickle.load(f)
-        if os.path.exists(os.path.join(p, "user_lookup.pkl")):
-            with open(os.path.join(p, "user_lookup.pkl"), 'rb') as f: lookup = pickle.load(f)
-        if xgb is not None and iso is not None and lookup is not None: break
-            
-    return xgb, iso, lookup
+        if os.path.exists(p):
+            with open(p, 'rb') as f: return pickle.load(f)
+    return None
 
-xgb_model, iso_forest_model, user_lookup = load_hybrid_artifacts()
-
-# FIXED: Explicitly checking variable identities instead of using the 'in' operator to avoid DataFrame truth validation errors
-if xgb_model is None or iso_forest_model is None or user_lookup is None:
-    st.error("⚠️ Pipeline artifacts missing. Ensure both models have finished training successfully.")
+user_lookup = load_user_lookup()
+if user_lookup is None:
+    st.error("⚠️ user_lookup.pkl missing. Run training script first.")
     st.stop()
 
 # --- 3. SIDEBAR INTERACTION CONTROL ---
@@ -85,9 +73,6 @@ chart_df = pd.DataFrame({'Consumption': simulated_stream}, index=historical_days
 rolling_mean_7d = np.mean(simulated_stream[-7:])
 diff_from_rolling = input_consumption - rolling_mean_7d
 
-# Match shape matrix requirements
-features = np.array([[input_consumption, day_of_week_dummy, is_weekend_numeric, user_historical_mean, diff_from_mean, rolling_mean_7d, diff_from_rolling]])
-
 # --- 5. VISUAL METRICS BOARD ---
 metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
 with metrics_col1:
@@ -98,7 +83,7 @@ with metrics_col3:
     divergence_color = "#FF4B4B" if abs(diff_from_mean) > (user_historical_mean * 1.5) else "#00F0FF"
     st.markdown(f'<div class="custom-card"><div class="card-label">🔄 Footprint Divergence</div><div class="card-value" style="color: {divergence_color} !important;">{diff_from_mean:+.2f}<span class="card-unit">kWh</span></div></div>', unsafe_allow_html=True)
 
-# --- 6. CORE DISPLAY & LOGIC RUN ---
+# --- 6. DISPLAY GRAPHICS & LIVE HTTP REQUESTS ---
 left_panel, right_panel = st.columns([2, 1])
 with left_panel:
     st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600;'>📈 14-Day Trailing Consumption Stream</h3>", unsafe_allow_html=True)
@@ -106,37 +91,51 @@ with left_panel:
     st.line_chart(chart_df, color=chart_color, height=300)
 
 with right_panel:
-    st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600;'>🤖 Hybrid Engine Diagnostics</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:white; font-size:1.1rem; font-weight:600;'>🤖 API Network Gateway</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748B; font-size:0.85rem; margin-bottom:20px;'>Dispatches operational feature vectors to FastAPI engine over HTTP network protocols:</p>", unsafe_allow_html=True)
     
     if st.button("🚀 Execute Hybrid Defense Scan", use_container_width=True):
-        with st.spinner("Analyzing operational patterns..."):
-            time.sleep(0.4)
-            
-            # Supervised XGBoost Inference
-            xgb_pred = xgb_model.predict(features)[0]
-            xgb_prob = xgb_model.predict_proba(features)[0][1] * 100
-            
-            # Unsupervised Isolation Forest Inference (-1 means anomaly, 1 means normal)
-            if_pred = iso_forest_model.predict(features)[0]
-            
-        # Display Results Based on Hybrid Core Rules
-        if xgb_pred == 1 or if_pred == -1:
-            st.markdown(f"""
-                <div class="status-panel" style="border-left: 4px solid #FF4B4B;">
-                    <h4 style="color:#FF4B4B; margin:0 0 6px 0; font-size:1rem; font-weight:700;">🚨 SECURITY COMPROMISED</h4>
-                    <p style="color:#94A3B8; margin:0; font-size:0.85rem; line-height:1.5;">
-                        <b>XGBoost Risk Score:</b> {xgb_prob:.1f}% {"(Flagged)" if xgb_pred==1 else "(Nominal)"}<br>
-                        <b>Isolation Forest Status:</b> {"⚠️ Outlier Detected" if if_pred==-1 else "Normal Distribution"}<br><br>
-                        <span style="color:#FF4B4B;">System Action:</span> Dispatched to priority field audit logs.
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-                <div class="status-panel" style="border-left: 4px solid #00F0FF;">
-                    <h4 style="color:#00F0FF; margin:0 0 6px 0; font-size:1rem; font-weight:700;">✅ SECURITY SECURE</h4>
-                    <p style="color:#94A3B8; margin:0; font-size:0.85rem; line-height:1.5;">
-                        Both Supervised pattern match constraints and Unsupervised spatial distribution limits report normal, nominal customer load operations.
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+        payload = {
+            "consumption": float(input_consumption),
+            "day_of_week": int(day_of_week_dummy),
+            "is_weekend": int(is_weekend_numeric),
+            "user_mean": float(user_historical_mean),
+            "diff_from_mean": float(diff_from_mean),
+            "rolling_mean_7d": float(rolling_mean_7d),
+            "diff_from_rolling": float(diff_from_rolling)
+        }
+        
+        try:
+            with st.spinner("Awaiting network response..."):
+                response = requests.post(API_URL, json=payload, timeout=5)
+                
+            if response.status_code == 200:
+                data = response.json()
+                is_anomaly = data["is_anomaly"]
+                xgb_prob = data["xgb_theft_probability"] * 100
+                if_pred = data["isolation_forest_prediction"]
+                
+                if is_anomaly == 1:
+                    st.markdown(f"""
+                        <div class="status-panel" style="border-left: 4px solid #FF4B4B;">
+                            <h4 style="color:#FF4B4B; margin:0 0 6px 0; font-size:1rem; font-weight:700;">🚨 SECURITY COMPROMISED</h4>
+                            <p style="color:#94A3B8; margin:0; font-size:0.85rem; line-height:1.5;">
+                                <b>XGBoost Risk Score:</b> {xgb_prob:.1f}%<br>
+                                <b>Isolation Forest Status:</b> {"⚠️ Outlier Detected" if if_pred==-1 else "Normal"}<br><br>
+                                <span style="color:#FF4B4B;">REST API Response Status:</span> 200 OK
+                            </p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                        <div class="status-panel" style="border-left: 4px solid #00F0FF;">
+                            <h4 style="color:#00F0FF; margin:0 0 6px 0; font-size:1rem; font-weight:700;">✅ SECURITY SECURE</h4>
+                            <p style="color:#94A3B8; margin:0; font-size:0.85rem; line-height:1.5;">
+                                REST API verified. All telemetry variables check out within normal operating standard deviations.
+                            </p>
+                        </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.error(f"❌ API Server returned error code: {response.status_code}")
+        except requests.exceptions.ConnectionError:
+            st.error("❌ API Server offline. Please launch the FastAPI engine behind this dashboard via 'uvicorn src.api:app --reload'")
