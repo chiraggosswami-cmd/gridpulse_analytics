@@ -50,13 +50,14 @@ def load_hybrid_artifacts():
             with open(os.path.join(p, "iso_forest_model.pkl"), 'rb') as f: iso = pickle.load(f)
         if os.path.exists(os.path.join(p, "user_lookup.pkl")):
             with open(os.path.join(p, "user_lookup.pkl"), 'rb') as f: lookup = pickle.load(f)
-        if xgb and iso and lookup: break
+        if xgb is not None and iso is not None and lookup is not None: break
             
     return xgb, iso, lookup
 
 xgb_model, iso_forest_model, user_lookup = load_hybrid_artifacts()
 
-if None in (xgb_model, iso_forest_model, user_lookup):
+# FIXED: Explicitly checking variable identities instead of using the 'in' operator to avoid DataFrame truth validation errors
+if xgb_model is None or iso_forest_model is None or user_lookup is None:
     st.error("⚠️ Pipeline artifacts missing. Ensure both models have finished training successfully.")
     st.stop()
 
