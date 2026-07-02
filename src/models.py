@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
 from sklearn.metrics import classification_report
+import kagglehub
 
 # Import the custom modules we built earlier!
 from data_pipeline import load_and_reshape_grid_data
@@ -81,6 +82,15 @@ def train_production_model(data_path: str, output_dir: str = "models"):
     print(f"🎉 Success! Production model and user lookup tables exported cleanly to: /{output_dir}")
 
 if __name__ == "__main__":
-    print("Model pipeline script compiled. Ready for orchestration.")
-    # Example local call pattern (uncomment to run locally once data path exists):
-    # train_production_model("path/to/AllData.csv")
+    print("Model pipeline script compiled. Ready for cloud orchestration.")
+    
+    print("☁️ Downloading latest smart grid dataset directly from Kaggle cache...")
+    # This automatically downloads the file into a temporary system cache folder,
+    # keeping your local project folder 100% clean of massive CSV files!
+    download_path = kagglehub.dataset_download("ahmedrady66/theft-detection-scheme-in-smart-grids")
+    
+    # Locate the AllData.csv inside the temporary cache path
+    csv_file_path = os.path.join(download_path, "AllData.csv")
+    
+    # Fire off our out-of-sample production model training loop!
+    train_production_model(csv_file_path)
