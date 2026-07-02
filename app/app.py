@@ -33,7 +33,8 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-API_URL = "http://127.0.0.1:8000/predict"
+# Look for a live production URL on the cloud, or fall back to local testing
+API_URL = os.environ.get("BACKEND_API_URL", "http://127.0.0.1:8000/predict")
 
 # --- 2. CACHED USER LOOKUP LOADER ---
 @st.cache_resource
