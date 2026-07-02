@@ -1,5 +1,9 @@
 # ⚡ GridPulse: Advanced Smart Grid Analytics & Theft Detection
 
+## 🔗 Live Deployment
+* **Interactive Dashboard:** [Live Streamlit App](https://gridpulseanalytics-chiraggosswami.streamlit.app/)
+* **Production API:** Hosted on Render (Decoupled REST Architecture)
+
 GridPulse is an end-to-end Machine Learning and data engineering pipeline designed to detect electricity theft and consumption anomalies in smart grids. Processing over 9 million daily data points, this project scales from raw time-series analysis to an interactive, production-ready monitoring dashboard.
 
 ## 🚀 Project Architecture
@@ -17,5 +21,9 @@ This project is systematically engineered into modular phases:
 │   └── models.py       # ML Training & evaluation configurations
 ├── app/                # Frontend dashboard layer
 │   └── app.py          # Streamlit user interface
+├── models/
+│   └── iso_forest_model.pkl
+│   └── user_lookup.pkl
+│   └── xgb_anomaly_model.pkl
 ├── requirements.txt    # Production dependencies
 └── README.md           # Documentation
