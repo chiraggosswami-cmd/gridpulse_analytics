@@ -103,7 +103,9 @@ with right_panel:
         
         try:
             with st.spinner("Pinging API..."):
-                response = requests.post(API_URL, json=payload, timeout=5)
+                response = requests.post(API_URL, json=payload, timeout=60)
+            except requests.exceptions.ReadTimeout:
+                st.error("The analytics engine is taking a bit longer to respond. If this is the first request, the server might be waking up from sleep. Please try again in a few moments!")
                 
             if response.status_code == 200:
                 data = response.json()
